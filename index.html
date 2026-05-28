@@ -67,13 +67,12 @@ async function sendFullReport(data){
   });
   const expiring=ROOM_IDS.flatMap(id=>{const r=data.rooms[id];if(!r.tenant.endDate||!r.tenant.name)return[];const dl=Math.ceil((new Date(r.tenant.endDate)-now)/86400000);return dl>=0&&dl<=60?[`  • ${id}號房（${r.tenant.name}）剩 ${dl} 天`]:[];});
   const sep="─────────────────";
-  const lines=[`🏠 租屋管理日報`,`📅 ${dateStr}`,sep,`👥 出租狀況`,`  出租中：${occupied.length} / ${ROOM_IDS.length} 間`,vacant.length>0?`  空房：${vacant.join("、")}`:"  空房：無",sep,`💰 本月房租（${curMonth}）`,`  ✅ 已繳 ${rentPaid.length} 間：${rentPaid.length>0?rentPaid.join("、")+"號房":"無"}`,`  ❌ 未繳 ${rentUnpaid.length} 間：${rentUnpaid.length>0?rentUnpaid.join("、")+"號房":"無"}`,sep,`⚡ 電費未繳`,elecUnpaid.length>0?elecUnpaid.join("
-"):"  ✅ 全部繳清"];
+  const sep2="\n";
+  const lines=[`🏠 租屋管理日報`,`📅 ${dateStr}`,sep,`👥 出租狀況`,`  出租中：${occupied.length} / ${ROOM_IDS.length} 間`,vacant.length>0?`  空房：${vacant.join("、")}`:"  空房：無",sep,`💰 本月房租（${curMonth}）`,`  ✅ 已繳 ${rentPaid.length} 間：${rentPaid.length>0?rentPaid.join("、")+"號房":"無"}`,`  ❌ 未繳 ${rentUnpaid.length} 間：${rentUnpaid.length>0?rentUnpaid.join("、")+"號房":"無"}`,sep,`⚡ 電費未繳`,elecUnpaid.length>0?elecUnpaid.join(sep2):"  ✅ 全部繳清"];
   if(expiring.length>0){lines.push(sep);lines.push("⏰ 租約即將到期");lines.push(...expiring);}
   if(urgentRepair.length>0){lines.push(sep);lines.push("🚨 緊急維修待處理");lines.push(...urgentRepair);}
   lines.push(sep);
-  return await sendLineMessage(lines.join("
-"));
+  return await sendLineMessage(lines.join(sep2));
 }
 
 function LoginScreen({onLogin}){
