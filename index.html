@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>租屋管理系統</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Noto Sans TC',sans-serif;background:#F0F4F8;color:#1E293B}
+input::placeholder,textarea::placeholder{color:#CBD5E1}
+input:focus,textarea:focus,select:focus{border-color:#6366F1!important;box-shadow:0 0 0 3px rgba(99,102,241,0.18)!important;outline:none}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:#F0F4F8}::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:4px}
+button,select{font-family:inherit}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect}=React;
+const APP_PASSWORD="2832",ELEC_RATE=5,RENDER_URL="https://rental-line-bot-3hvy.onrender.com/send";
+const ROOM_IDS=["1A","2A","2B","3A","3B","4A","4B","5A","5B"];
+const newRoom=()=>({tenant:{name:"",phone:"",rent:"",deposit:"",startDate:"",endDate:""},elec:[],rent:[],repair:[],notes:""});
+const initData=()=>({rooms:Object.fromEntries(ROOM_IDS.map(id=>[id,newRoom()]))});
+function loadData(){try{const d=localStorage.getItem("rental_v5");return d?JSON.parse(d):initData();}catch{return initData();}}
+function saveData(d){try{localStorage.setItem("rental_v5",JSON.stringify(d));}catch{}}
+async function sendLineMessage(message){
+  try{const res=await fetch(RENDER_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message})});return res.ok;}
+  catch(e){return false;}
+}
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
+const twd=n=>`NT$${Number(n||0).toLocaleString()}`;
+const today=()=>new Date().toISOString().slice(0,10);
+const thisMonth=()=>{const n=new Date();return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}`;};
+const thisYear=()=>String(new Date().getFullYear());
+const getYear=s=>(s||"").slice(0,4);
+const C={bg:"#F0F4F8",surface:"#FFFFFF",card:"#FFFFFF",border:"#E2E8F0",text:"#1E293B",muted:"#94A3B8",accent:"#6366F1",accentL:"#EEF2FF",green:"#10B981",greenL:"#D1FAE5",red:"#EF4444",redL:"#FEE2E2",yellow:"#F59E0B",yellowL:"#FEF3C7",blue:"#3B82F6",blueL:"#DBEAFE"};
+const shadow="0 1px 3px rgba(0,0,0,0.08)";
+const inp={width:"100%",padding:"10px 13px",background:"#F8FAFC",border:`1.5px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:14,outline:"none",boxSizing:"border-box"};
+const lbl={color:C.muted,fontSize:12,fontWeight:600,marginBottom:5,display:"block"};
+function PBtn({children,onClick,style={},bg=C.accent}){return <button onClick={onClick} style={{padding:"9px 18px",background:bg,border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",...style}}>{children}</button>;}
+function GBtn({children,onClick,color=C.muted,style={}}){return <button onClick={onClick} style={{padding:"8px 14px",background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:10,color,fontSize:13,fontWeight:600,cursor:"pointer",...style}}>{children}</button>;}
+function Card({children,style={}}){return <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:20,marginBottom:14,boxShadow:shadow,...style}}>{children}</div>;}
+function Badge({label,color=C.muted,bg}){return <span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:20,background:bg||color+"18",color,fontSize:11,fontWeight:700}}>{label}</span>;}
+function SecTitle({icon,title}){return <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:18}}><span style={{fontSize:18}}>{icon}</span><span style={{fontSize:16,fontWeight:800,color:C.text}}>{title}</span></div>;}
+function Modal({title,onClose,children}){return <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}><div style={{background:C.surface,borderRadius:18,padding:28,width:"100%",maxWidth:460,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 4px 16px rgba(0,0,0,0.10)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}><h3 style={{color:C.text,margin:0,fontSize:16,fontWeight:800}}>{title}</h3><button onClick={onClose} style={{background:C.bg,border:"none",borderRadius:8,color:C.muted,width:32,height:32,cursor:"pointer",fontSize:18}}>×</button></div>{children}</div></div>;}
+function AlertBanner({items}){if(!items.length)return null;return <div style={{background:C.redL,border:`1.5px solid ${C.red}44`,borderRadius:12,padding:"12px 16px",marginBottom:16,display:"flex",gap:10}}><span style={{fontSize:18}}>🔔</span><div><div style={{color:C.red,fontWeight:700,fontSize:13,marginBottom:4}}>未繳款提醒</div>{items.map((it,i)=><div key={i} style={{color:"#7f1d1d",fontSize:13,lineHeight:1.8}}>• {it}</div>)}</div></div>;}
+function KpiCard({icon,label,value,sub,color,bg}){return <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"18px 20px",boxShadow:shadow}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}><div style={{width:38,height:38,borderRadius:10,background:bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>{icon}</div><span style={{color:C.muted,fontSize:12,fontWeight:600}}>{label}</span></div><div style={{color,fontSize:22,fontWeight:800}}>{value}</div>{sub&&<div style={{color:C.muted,fontSize:12,marginTop:4}}>{sub}</div>}</div>;}
+function YearFilter({year,setYear,years}){return <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{color:C.muted,fontSize:13}}>年度</span><select value={year} onChange={e=>setYear(e.target.value)} style={{...inp,width:"auto",padding:"6px 12px",fontSize:13,cursor:"pointer"}}><option value="all">全部</option>{years.map(y=><option key={y} value={y}>{y} 年</option>)}</select></div>;}
+
+async function sendFullReport(data){
+  const now=new Date(),curMonth=thisMonth();
+  const dateStr=now.toLocaleDateString("zh-TW",{year:"numeric",month:"long",day:"numeric"});
+  const occupied=ROOM_IDS.filter(id=>data.rooms[id].tenant.name);
+  const vacant=ROOM_IDS.filter(id=>!data.rooms[id].tenant.name);
+  const rentPaid=[],rentUnpaid=[],elecPaid=[],elecUnpaid=[],urgentRepair=[];
+  ROOM_IDS.forEach(id=>{
+    const r=data.rooms[id];if(!r.tenant.name)return;
+    const curRent=r.rent.find(x=>x.month===curMonth);
+    if(curRent&&curRent.paid)rentPaid.push(`${id}（${r.tenant.name}）`);else rentUnpaid.push(`${id}（${r.tenant.name}）`);
+    const unpaidE=r.elec.filter(x=>!x.paid);
+    if(unpaidE.length===0)elecPaid.push(id);else unpaidE.forEach(e=>elecUnpaid.push(`${id}（${e.month} NT$${e.cost}）`));
+    r.repair.filter(x=>!x.done&&x.priority==="緊急").forEach(x=>urgentRepair.push(`${id}：${x.title}`));
+  });
+  const expiring=ROOM_IDS.flatMap(id=>{const r=data.rooms[id];if(!r.tenant.endDate||!r.tenant.name)return[];const dl=Math.ceil((new Date(r.tenant.endDate)-now)/86400000);return dl>=0&&dl<=60?[`${id}（${r.tenant.name}）剩 ${dl} 天`]:[];});
+  const msg=[`🏠 租屋管理日報`,`📅 ${dateStr}`,`👥 出租 ${occupied.length}／${ROOM_IDS.length} 間　空房：${vacant.length>0?vacant.join("、"):"無"}`,``,`💰 本月房租`,`  ✅ 已繳（${rentPaid.length}間）：${rentPaid.join("、")||"無"}`,`  ❌ 未繳（${rentUnpaid.length}間）：${rentUnpaid.join("、")||"無"}`,``,`⚡ 電費狀況`,elecUnpaid.length>0?`  ✅ 無欠費：${elecPaid.join("、")||"無"}\n  ❌ 未繳：${elecUnpaid.join("、")}`:`  ✅ 全部繳清`,expiring.length>0?`\n⏰ 租約即將到期\n${expiring.map(x=>`  • ${x}`).join("\n")}`:"",urgentRepair.length>0?`\n🚨 緊急維修待處理\n${urgentRepair.map(x=>`  • ${x}`).join("\n")}`:""].filter(x=>x!=="").join("\n");
+  return await sendLineMessage(msg);
+}
+
+function LoginScreen({onLogin}){
+  const [pw,setPw]=useState("");const [err,setErr]=useState("");
+  const tryLogin=()=>{if(pw===APP_PASSWORD)onLogin();else{setErr("密碼錯誤");setPw("");}};
+  return <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#667eea,#764ba2)",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{background:"#fff",borderRadius:22,padding:"44px 40px",width:340,boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}><div style={{textAlign:"center",marginBottom:30}}><div style={{width:68,height:68,background:"linear-gradient(135deg,#6366F1,#8B5CF6)",borderRadius:18,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",fontSize:32}}>🏠</div><h1 style={{color:C.text,fontSize:21,fontWeight:800}}>租屋管理系統</h1><p style={{color:C.muted,fontSize:13,marginTop:6}}>請輸入密碼以進入</p></div><label style={lbl}>密碼</label><input style={{...inp,marginBottom:10,letterSpacing:8,fontSize:22,textAlign:"center"}} type="password" value={pw} onChange={e=>{setPw(e.target.value);setErr("");}} onKeyDown={e=>e.key==="Enter"&&tryLogin()} placeholder="••••" autoFocus />{err&&<p style={{color:C.red,fontSize:13,marginBottom:12,textAlign:"center"}}>⚠ {err}</p>}<PBtn onClick={tryLogin} style={{width:"100%",padding:13,fontSize:15,borderRadius:12}}>進入系統</PBtn></div></div>;
+}
+
+function TenantTab({room,roomKey,updateRoom,showToast}){
+  const [form,setForm]=useState({...room.tenant});
+  useEffect(()=>setForm({...room.tenant}),[room]);
+  const set=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
+  const save=()=>{updateRoom(roomKey,r=>({...r,tenant:{...form}}));showToast("✓ 租客資料已儲存");};
+  const clear=()=>{const e={name:"",phone:"",rent:"",deposit:"",startDate:"",endDate:""};setForm(e);updateRoom(roomKey,r=>({...r,tenant:e}));showToast("✓ 已清除");};
+  const dl=form.endDate?Math.ceil((new Date(form.endDate)-new Date())/86400000):null;
+  return <div style={{maxWidth:540}}>
+    <SecTitle icon="👤" title="租客資料" />
+    <AlertBanner items={dl!==null&&dl<=60?[`租約將於 ${form.endDate} 到期（剩 ${dl} 天）`]:[]} />
+    <Card>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 16px"}}>
+        {[{k:"name",label:"租客姓名",ph:"王小明"},{k:"phone",label:"聯絡電話",ph:"0912-345-678"},{k:"rent",label:"月租金（元）",ph:"8000",type:"number"},{k:"deposit",label:"押金（元）",ph:"16000",type:"number"},{k:"startDate",label:"起租日",type:"date"},{k:"endDate",label:"到期日",type:"date"}].map(({k,label,ph,type="text"})=>(
+          <div key={k} style={{marginBottom:14}}><label style={lbl}>{label}</label><input style={inp} type={type} value={form[k]||""} onChange={set(k)} placeholder={ph} /></div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:10}}><PBtn onClick={save} style={{flex:1}}>儲存資料</PBtn><GBtn onClick={clear} color={C.red}>清除</GBtn></div>
+    </Card>
+    {form.name&&<Card style={{background:"linear-gradient(135deg,#D1FAE5,#A7F3D0)",border:"none"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}><div><div style={{color:"#065F46",fontWeight:800,fontSize:17,marginBottom:8}}>{form.name}{form.phone&&<span style={{fontWeight:500,fontSize:13,marginLeft:10,color:"#047857"}}>{form.phone}</span>}</div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{form.rent&&<Badge label={`月租 ${twd(form.rent)}`} color="#065F46" bg="#6EE7B7" />}{form.deposit&&<Badge label={`押金 ${twd(form.deposit)}`} color="#1E40AF" bg="#BFDBFE" />}{form.startDate&&<Badge label={`起租 ${form.startDate}`} color="#6B7280" bg="#E5E7EB" />}</div></div>{dl!==null&&<div style={{textAlign:"center",background:"#fff",borderRadius:12,padding:"10px 14px"}}><div style={{color:dl<30?C.red:dl<60?C.yellow:C.green,fontWeight:800,fontSize:24}}>{dl}</div><div style={{color:C.muted,fontSize:10,marginTop:4}}>天後到期</div></div>}</div></Card>}
+    <Card><SecTitle icon="📝" title="備忘錄" /><textarea value={room.notes||""} rows={3} onChange={e=>updateRoom(roomKey,r=>({...r,notes:e.target.value}))} placeholder="鑰匙數量、停車位、寵物協議…" style={{...inp,resize:"vertical",lineHeight:1.7}} /></Card>
+  </div>;
+}
+
+function ElecTab({room,roomKey,updateRoom,showToast}){
+  const [modal,setModal]=useState(false);const [year,setYear]=useState(thisYear());
+  const [form,setForm]=useState({date:today(),month:thisMonth(),prev:"",curr:""});
+  const set=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
+  const lastReading=room.elec.length>0?room.elec[room.elec.length-1].curr:"";
+  const usage=Math.max(0,Number(form.curr)-Number(form.prev)),cost=usage*ELEC_RATE;
+  const openModal=()=>{setForm({date:today(),month:thisMonth(),prev:lastReading||"",curr:""});setModal(true);};
+  const addRecord=()=>{if(!form.date||form.prev===""||!form.curr)return;updateRoom(roomKey,r=>({...r,elec:[...r.elec,{id:uid(),date:form.date,month:form.month,prev:Number(form.prev),curr:Number(form.curr),usage,cost,paid:false}]}));showToast("✓ 電費記錄已新增");setModal(false);};
+  const togglePaid=id=>updateRoom(roomKey,r=>({...r,elec:r.elec.map(x=>x.id===id?{...x,paid:!x.paid}:x)}));
+  const del=id=>{updateRoom(roomKey,r=>({...r,elec:r.elec.filter(x=>x.id!==id)}));showToast("✓ 已刪除");};
+  const years=[...new Set(room.elec.map(r=>getYear(r.month||r.date)).filter(Boolean))].sort().reverse();
+  const filtered=year==="all"?room.elec:room.elec.filter(r=>getYear(r.month||r.date)===year);
+  const unpaid=filtered.filter(x=>!x.paid);
+  return <div style={{maxWidth:640}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><SecTitle icon="⚡" title="電費記錄" /><PBtn onClick={openModal} bg="#F59E0B">＋ 新增抄表</PBtn></div>
+    <AlertBanner items={unpaid.map(x=>`${x.month||x.date} 電費 ${twd(x.cost)} 尚未繳納`)} />
+    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
+      <KpiCard icon="📋" label="抄表次數" value={filtered.length+" 次"} color={C.blue} bg={C.blueL} />
+      <KpiCard icon="⚡" label="累計電費" value={twd(filtered.reduce((s,r)=>s+r.cost,0))} color={C.yellow} bg={C.yellowL} />
+      <KpiCard icon="❗" label="未繳電費" value={twd(unpaid.reduce((s,r)=>s+r.cost,0))} sub={unpaid.length>0?`${unpaid.length} 筆未繳`:""} color={unpaid.length>0?C.red:C.green} bg={unpaid.length>0?C.redL:C.greenL} />
+    </div>
+    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}><YearFilter year={year} setYear={setYear} years={years} /></div>
+    {filtered.length===0?<Card style={{textAlign:"center"}}><p style={{color:C.muted,margin:0}}>此年度無電費記錄</p></Card>:[...filtered].reverse().map(r=>(
+      <div key={r.id} style={{background:C.card,border:`1.5px solid ${r.paid?"#D1FAE5":C.redL}`,borderRadius:14,padding:"14px 18px",marginBottom:10,boxShadow:shadow}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><span style={{color:C.text,fontWeight:700,fontSize:15}}>{r.month}</span><Badge label={r.paid?"已繳":"未繳"} color={r.paid?C.green:C.red} /></div><div style={{color:C.muted,fontSize:13}}>{r.prev} → {r.curr} 度　用電 <strong style={{color:C.text}}>{r.usage}</strong> 度　抄表：{r.date}</div></div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{textAlign:"right"}}><div style={{color:C.yellow,fontWeight:800,fontSize:18}}>{twd(r.cost)}</div><div style={{color:C.muted,fontSize:11}}>{r.usage}度×$5</div></div><GBtn onClick={()=>togglePaid(r.id)} style={{fontSize:11,padding:"5px 10px"}}>{r.paid?"標未繳":"標已繳"}</GBtn><button onClick={()=>del(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.muted,fontSize:18,padding:4}}>🗑</button></div>
+        </div>
+      </div>
+    ))}
+    {modal&&<Modal title="新增電費抄表" onClose={()=>setModal(false)}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 14px"}}>
+        <div style={{marginBottom:14}}><label style={lbl}>月份</label><input style={inp} type="month" value={form.month} onChange={set("month")} /></div>
+        <div style={{marginBottom:14}}><label style={lbl}>抄表日期</label><input style={inp} type="date" value={form.date} onChange={set("date")} /></div>
+        <div style={{marginBottom:14}}><label style={lbl}>上期度數</label><input style={inp} type="number" value={form.prev} onChange={set("prev")} placeholder="0" /></div>
+        <div style={{marginBottom:14}}><label style={lbl}>本期度數</label><input style={inp} type="number" value={form.curr} onChange={set("curr")} placeholder="0" /></div>
+      </div>
+      {usage>0&&<div style={{background:"#FEF3C7",border:"1.5px solid #FCD34D",borderRadius:12,padding:"12px 16px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{color:"#92400E",fontSize:14}}>用電 <strong>{usage}</strong> 度</span><span style={{color:C.yellow,fontWeight:800,fontSize:18}}>應繳 {twd(cost)}</span></div>}
+      <PBtn onClick={addRecord} bg="#F59E0B" style={{width:"100%",padding:12}}>確認新增（預設未繳）</PBtn>
+    </Modal>}
+  </div>;
+}
+
+function RentTab({room,roomKey,updateRoom,showToast}){
+  const [modal,setModal]=useState(false);const [year,setYear]=useState(thisYear());
+  const [form,setForm]=useState({date:today(),month:thisMonth(),amount:"",note:""});
+  const set=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
+  const openModal=()=>{setForm({date:today(),month:thisMonth(),amount:room.tenant.rent||"",note:""});setModal(true);};
+  const addRecord=()=>{if(!form.amount)return;updateRoom(roomKey,r=>({...r,rent:[...r.rent,{id:uid(),...form,amount:Number(form.amount),paid:false}]}));showToast("✓ 收租記錄已新增");setModal(false);};
+  const togglePaid=id=>updateRoom(roomKey,r=>({...r,rent:r.rent.map(x=>x.id===id?{...x,paid:!x.paid}:x)}));
+  const del=id=>{updateRoom(roomKey,r=>({...r,rent:r.rent.filter(x=>x.id!==id)}));showToast("✓ 已刪除");};
+  const years=[...new Set(room.rent.map(r=>getYear(r.month||r.date)).filter(Boolean))].sort().reverse();
+  const filtered=year==="all"?room.rent:room.rent.filter(r=>getYear(r.month||r.date)===year);
+  const unpaid=filtered.filter(x=>!x.paid);
+  const paidAmt=filtered.filter(r=>r.paid).reduce((s,r)=>s+r.amount,0),unpaidAmt=unpaid.reduce((s,r)=>s+r.amount,0);
+  return <div style={{maxWidth:640}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><SecTitle icon="💰" title="收租記錄" /><PBtn onClick={openModal} bg={C.green}>＋ 新增收租</PBtn></div>
+    <AlertBanner items={unpaid.map(x=>`${x.month} 房租 ${twd(x.amount)} 尚未收取`)} />
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
+      <KpiCard icon="✅" label="已收金額" value={twd(paidAmt)} sub={`${filtered.filter(r=>r.paid).length} 筆已收`} color={C.green} bg={C.greenL} />
+      <KpiCard icon="⏳" label="未收金額" value={twd(unpaidAmt)} sub={unpaid.length>0?`${unpaid.length} 筆未收`:""} color={unpaidAmt>0?C.red:C.green} bg={unpaidAmt>0?C.redL:C.greenL} />
+    </div>
+    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}><YearFilter year={year} setYear={setYear} years={years} /></div>
+    {filtered.length===0?<Card style={{textAlign:"center"}}><p style={{color:C.muted,margin:0}}>此年度無收租記錄</p></Card>:[...filtered].reverse().map(r=>(
+      <div key={r.id} style={{background:C.card,border:`1.5px solid ${r.paid?"#D1FAE5":C.redL}`,borderRadius:14,padding:"14px 18px",marginBottom:10,boxShadow:shadow}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><span style={{color:C.text,fontWeight:700,fontSize:15}}>{r.month}</span><Badge label={r.paid?"已收":"未收"} color={r.paid?C.green:C.red} /></div><div style={{color:C.muted,fontSize:13}}>登記日：{r.date}{r.note&&`　備註：${r.note}`}</div></div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{color:C.green,fontWeight:800,fontSize:18}}>{twd(r.amount)}</div><GBtn onClick={()=>togglePaid(r.id)} style={{fontSize:11,padding:"5px 10px"}}>{r.paid?"標未收":"標已收"}</GBtn><button onClick={()=>del(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.muted,fontSize:18,padding:4}}>🗑</button></div>
+        </div>
+      </div>
+    ))}
+    {modal&&<Modal title="新增收租記錄" onClose={()=>setModal(false)}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 14px"}}>
+        <div style={{marginBottom:14}}><label style={lbl}>收款月份</label><input style={inp} type="month" value={form.month} onChange={set("month")} /></div>
+        <div style={{marginBottom:14}}><label style={lbl}>登記日期</label><input style={inp} type="date" value={form.date} onChange={set("date")} /></div>
+      </div>
+      <div style={{marginBottom:14}}><label style={lbl}>金額（元）</label><input style={inp} type="number" value={form.amount} onChange={set("amount")} placeholder="8000" /></div>
+      <div style={{marginBottom:18}}><label style={lbl}>備註（選填）</label><input style={inp} value={form.note} onChange={set("note")} placeholder="含水費、匯款…" /></div>
+      <PBtn onClick={addRecord} bg={C.green} style={{width:"100%",padding:12}}>確認新增（預設未收）</PBtn>
+    </Modal>}
+  </div>;
+}
+
+function RepairTab({room,roomKey,updateRoom,showToast}){
+  const [modal,setModal]=useState(false);const [year,setYear]=useState(thisYear());
+  const [form,setForm]=useState({date:today(),title:"",cost:"",note:"",priority:"一般"});
+  const set=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
+  const openModal=()=>{setForm({date:today(),title:"",cost:"",note:"",priority:"一般"});setModal(true);};
+  const addRecord=()=>{if(!form.title)return;updateRoom(roomKey,r=>({...r,repair:[...r.repair,{id:uid(),...form,cost:Number(form.cost||0),done:false}]}));showToast("✓ 維修記錄已新增");setModal(false);};
+  const toggleDone=id=>updateRoom(roomKey,r=>({...r,repair:r.repair.map(x=>x.id===id?{...x,done:!x.done}:x)}));
+  const del=id=>{updateRoom(roomKey,r=>({...r,repair:r.repair.filter(x=>x.id!==id)}));showToast("✓ 已刪除");};
+  const years=[...new Set(room.repair.map(r=>getYear(r.date)).filter(Boolean))].sort().reverse();
+  const filtered=year==="all"?room.repair:room.repair.filter(r=>getYear(r.date)===year);
+  const pending=filtered.filter(r=>!r.done);
+  const pColor=p=>p==="緊急"?C.red:p==="重要"?C.yellow:C.muted;
+  return <div style={{maxWidth:640}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><SecTitle icon="🔧" title="維修記錄" /><PBtn onClick={openModal} bg="#8B5CF6">＋ 新增維修</PBtn></div>
+    <AlertBanner items={pending.filter(r=>r.priority==="緊急").map(r=>`緊急維修待處理：${r.title}`)} />
+    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
+      <KpiCard icon="⏳" label="待處理" value={pending.length+" 件"} color={pending.length>0?C.red:C.green} bg={pending.length>0?C.redL:C.greenL} />
+      <KpiCard icon="🚨" label="緊急項目" value={pending.filter(r=>r.priority==="緊急").length+" 件"} color={C.red} bg={C.redL} />
+      <KpiCard icon="💸" label="累計費用" value={twd(filtered.reduce((s,r)=>s+(r.cost||0),0))} color="#8B5CF6" bg="#EDE9FE" />
+    </div>
+    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}><YearFilter year={year} setYear={setYear} years={years} /></div>
+    {filtered.length===0?<Card style={{textAlign:"center"}}><p style={{color:C.muted,margin:0}}>此年度無維修記錄</p></Card>:[...filtered].reverse().map(r=>(
+      <div key={r.id} style={{background:C.card,border:`1.5px solid ${r.done?"#E5E7EB":r.priority==="緊急"?C.redL:"#E0E7FF"}`,borderRadius:14,padding:"14px 18px",marginBottom:10,boxShadow:shadow,opacity:r.done?.6:1}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+          <div style={{flex:1}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}><span style={{color:C.text,fontWeight:700,textDecoration:r.done?"line-through":"none"}}>{r.title}</span><Badge label={r.done?"已完成":"待處理"} color={r.done?C.green:C.red} />{r.priority!=="一般"&&<Badge label={r.priority} color={pColor(r.priority)} />}</div><div style={{color:C.muted,fontSize:13}}>{r.date}{r.note&&`　${r.note}`}</div></div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:12}}>{r.cost>0&&<span style={{color:"#8B5CF6",fontWeight:700,fontSize:15}}>{twd(r.cost)}</span>}<GBtn onClick={()=>toggleDone(r.id)} style={{fontSize:11,padding:"5px 10px"}}>{r.done?"重開":"完成"}</GBtn><button onClick={()=>del(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.muted,fontSize:18,padding:4}}>🗑</button></div>
+        </div>
+      </div>
+    ))}
+    {modal&&<Modal title="新增維修記錄" onClose={()=>setModal(false)}>
+      <div style={{marginBottom:14}}><label style={lbl}>日期</label><input style={inp} type="date" value={form.date} onChange={set("date")} /></div>
+      <div style={{marginBottom:14}}><label style={lbl}>維修項目</label><input style={inp} value={form.title} onChange={set("title")} placeholder="如：更換馬桶水箱" /></div>
+      <div style={{marginBottom:14}}><label style={lbl}>優先等級</label><select style={inp} value={form.priority} onChange={set("priority")}>{["一般","重要","緊急"].map(p=><option key={p}>{p}</option>)}</select></div>
+      <div style={{marginBottom:14}}><label style={lbl}>費用（元，選填）</label><input style={inp} type="number" value={form.cost} onChange={set("cost")} placeholder="0" /></div>
+      <div style={{marginBottom:18}}><label style={lbl}>備註（選填）</label><input style={inp} value={form.note} onChange={set("note")} placeholder="如：等待零件" /></div>
+      <PBtn onClick={addRecord} bg="#8B5CF6" style={{width:"100%",padding:12}}>確認新增</PBtn>
+    </Modal>}
+  </div>;
+}
+
+function DashboardTab({data}){
+  const [year,setYear]=useState(thisYear());const now=new Date();
+  const rooms=Object.entries(data.rooms);
+  const allYears=[...new Set(rooms.flatMap(([,r])=>[...r.rent.map(x=>getYear(x.month||x.date)),...r.elec.map(x=>getYear(x.month||x.date)),...r.repair.map(x=>getYear(x.date))]).filter(Boolean))].sort().reverse();
+  const filterY=(arr,key="month")=>year==="all"?arr:arr.filter(x=>getYear(x[key]||x.date)===year);
+  const totalRent=rooms.reduce((s,[,r])=>s+Number(r.tenant.rent||0),0);
+  const occupied=rooms.filter(([,r])=>r.tenant.name).length;
+  const unpaidRent=rooms.flatMap(([id,r])=>filterY(r.rent).filter(x=>!x.paid).map(x=>({...x,room:id})));
+  const unpaidElec=rooms.flatMap(([id,r])=>filterY(r.elec).filter(x=>!x.paid).map(x=>({...x,room:id})));
+  const pendingRep=rooms.flatMap(([id,r])=>filterY(r.repair,"date").filter(x=>!x.done).map(x=>({...x,room:id})));
+  const expiring=rooms.flatMap(([id,r])=>{if(!r.tenant.endDate||!r.tenant.name)return[];const dl=Math.ceil((new Date(r.tenant.endDate)-now)/86400000);return dl<=60&&dl>=0?[{room:id,name:r.tenant.name,endDate:r.tenant.endDate,dl}]:[];});
+  const totalUnpaidRent=unpaidRent.reduce((s,x)=>s+x.amount,0),totalUnpaidElec=unpaidElec.reduce((s,x)=>s+x.cost,0);
+  const yearRentCollected=rooms.flatMap(([,r])=>filterY(r.rent).filter(x=>x.paid)).reduce((s,x)=>s+x.amount,0);
+  return <div style={{maxWidth:720}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}><SecTitle icon="📊" title="全棟總覽" /><YearFilter year={year} setYear={setYear} years={allYears} /></div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:14,marginBottom:22}}>
+      <KpiCard icon="🏠" label="出租率" value={`${occupied} / ${ROOM_IDS.length} 間`} sub={`月租總計 ${twd(totalRent)}`} color={C.accent} bg={C.accentL} />
+      <KpiCard icon="💰" label="已收房租" value={twd(yearRentCollected)} sub={year==="all"?"全部":year+" 年"} color={C.green} bg={C.greenL} />
+      <KpiCard icon="❗" label="未收房租" value={twd(totalUnpaidRent)} sub={unpaidRent.length>0?`${unpaidRent.length} 筆未收`:""} color={totalUnpaidRent>0?C.red:C.green} bg={totalUnpaidRent>0?C.redL:C.greenL} />
+      <KpiCard icon="⚡" label="未繳電費" value={twd(totalUnpaidElec)} sub={unpaidElec.length>0?`${unpaidElec.length} 筆未繳`:""} color={totalUnpaidElec>0?C.yellow:C.green} bg={totalUnpaidElec>0?C.yellowL:C.greenL} />
+    </div>
+    {unpaidRent.length>0&&<Card style={{marginBottom:14}}><div style={{color:C.red,fontWeight:700,fontSize:14,marginBottom:12}}>🔴 未收房租明細</div>{unpaidRent.map((x,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${C.border}`}}><span style={{color:C.text,fontSize:13}}><strong>{x.room}</strong> 號房　{x.month}</span><Badge label={twd(x.amount)} color={C.red} /></div>)}</Card>}
+    {unpaidElec.length>0&&<Card style={{marginBottom:14}}><div style={{color:C.yellow,fontWeight:700,fontSize:14,marginBottom:12}}>🟡 未繳電費明細</div>{unpaidElec.map((x,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${C.border}`}}><span style={{color:C.text,fontSize:13}}><strong>{x.room}</strong> 號房　{x.month}　{x.usage} 度</span><Badge label={twd(x.cost)} color={C.yellow} /></div>)}</Card>}
+    {expiring.length>0&&<Card style={{marginBottom:14}}><div style={{color:C.accent,fontWeight:700,fontSize:14,marginBottom:12}}>⏰ 租約即將到期（60天內）</div>{expiring.map((x,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${C.border}`}}><span style={{color:C.text,fontSize:13}}><strong>{x.room}</strong> 號房　{x.name}</span><Badge label={`剩 ${x.dl} 天（${x.endDate}）`} color={x.dl<30?C.red:C.yellow} /></div>)}</Card>}
+    {pendingRep.length>0&&<Card><div style={{color:"#8B5CF6",fontWeight:700,fontSize:14,marginBottom:12}}>🔧 待處理維修</div>{pendingRep.map((x,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${C.border}`}}><span style={{color:C.text,fontSize:13}}><strong>{x.room}</strong> 號房　{x.title}</span><Badge label={x.priority||"一般"} color={x.priority==="緊急"?C.red:x.priority==="重要"?C.yellow:C.muted} /></div>)}</Card>}
+    {unpaidRent.length===0&&unpaidElec.length===0&&expiring.length===0&&pendingRep.length===0&&<Card style={{textAlign:"center",padding:40}}><div style={{fontSize:40,marginBottom:10}}>✅</div><div style={{color:C.green,fontWeight:800,fontSize:16}}>目前無待處理事項</div></Card>}
+  </div>;
+}
+
+function App(){
+  const [loggedIn,setLoggedIn]=useState(false);
+  const [data,setData]=useState(()=>loadData());
+  const [activeRoom,setActiveRoom]=useState(null);
+  const [activeTab,setActiveTab]=useState("tenant");
+  const [toast,setToast]=useState("");
+  const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
+  const updateRoom=(roomKey,updater)=>{setData(prev=>{const next={...prev,rooms:{...prev.rooms,[roomKey]:updater(prev.rooms[roomKey])}};saveData(next);return next;});};
+  useEffect(()=>{if(loggedIn&&data){sendFullReport(data).then(sent=>{if(sent)showToast("📲 LINE 日報已發送");});}}, [loggedIn]);
+  if(!loggedIn)return <LoginScreen onLogin={()=>setLoggedIn(true)} />;
+  const room=activeRoom?data.rooms[activeRoom]:null;
+  const totalAlerts=Object.values(data.rooms).reduce((s,r)=>s+r.rent.filter(x=>!x.paid).length+r.elec.filter(x=>!x.paid).length,0);
+  const roomHasAlert=id=>{const r=data.rooms[id];return r.rent.filter(x=>!x.paid).length+r.elec.filter(x=>!x.paid).length>0;};
+  const tabs=[{key:"tenant",label:"租客",icon:"👤"},{key:"elec",label:"電費",icon:"⚡"},{key:"rent",label:"收租",icon:"💰"},{key:"repair",label:"維修",icon:"🔧"}];
+  return <div style={{minHeight:"100vh",background:C.bg}}>
+    {toast&&<div style={{position:"fixed",top:20,right:20,zIndex:9999,background:C.green,color:"#fff",padding:"10px 20px",borderRadius:12,fontSize:13,fontWeight:700,boxShadow:"0 4px 20px rgba(0,0,0,0.2)"}}>{toast}</div>}
+    <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:"0 24px",height:56,display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:shadow,position:"sticky",top:0,zIndex:100}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:34,height:34,background:"linear-gradient(135deg,#6366F1,#8B5CF6)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🏠</div><span style={{fontWeight:800,fontSize:16}}>租屋管理系統</span></div>
+      <div style={{display:"flex",alignItems:"center",gap:12}}>
+        <button onClick={()=>setActiveRoom(null)} style={{position:"relative",padding:"6px 16px",background:activeRoom===null?"linear-gradient(135deg,#6366F1,#8B5CF6)":C.bg,border:`1.5px solid ${activeRoom===null?C.accent:C.border}`,borderRadius:10,color:activeRoom===null?"#fff":C.muted,fontSize:13,fontWeight:700,cursor:"pointer"}}>📊 總覽{totalAlerts>0&&<span style={{position:"absolute",top:-5,right:-5,background:C.red,color:"#fff",borderRadius:10,fontSize:10,padding:"1px 5px",fontWeight:700}}>{totalAlerts}</span>}</button>
+        <button onClick={async()=>{showToast("發送中…");const sent=await sendFullReport(data);showToast(sent?"📲 LINE 日報已發送！":"❌ 發送失敗");}} style={{padding:"6px 14px",background:"#06C755",border:"none",borderRadius:10,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>LINE 日報</button>
+        <button onClick={()=>setLoggedIn(false)} style={{padding:"6px 14px",background:"transparent",border:`1.5px solid ${C.border}`,borderRadius:10,color:C.muted,fontSize:12,cursor:"pointer"}}>登出</button>
+      </div>
+    </div>
+    <div style={{display:"flex",height:"calc(100vh - 56px)"}}>
+      <div style={{width:90,background:"#1E293B",overflowY:"auto",flexShrink:0,paddingTop:12}}>
+        <div style={{color:"#475569",fontSize:10,fontWeight:700,letterSpacing:1.5,textAlign:"center",marginBottom:8}}>ROOMS</div>
+        {ROOM_IDS.map(id=>{const r=data.rooms[id];const occ=!!r.tenant.name;const act=activeRoom===id;return <button key={id} onClick={()=>{setActiveRoom(id);setActiveTab("tenant");}} style={{width:"100%",padding:"13px 6px",border:"none",cursor:"pointer",background:act?"rgba(99,102,241,0.25)":"transparent",borderLeft:`3px solid ${act?C.accent:"transparent"}`,textAlign:"center",position:"relative"}}><div style={{fontSize:15,fontWeight:800,color:act?"#A5B4FC":"#fff"}}>{id}</div><div style={{fontSize:10,color:occ?"#6EE7B7":"#64748B",marginTop:3}}>{occ?r.tenant.name.slice(0,4):"空房"}</div>{roomHasAlert(id)&&<span style={{position:"absolute",top:8,right:8,width:7,height:7,borderRadius:"50%",background:C.red}} />}</button>;})}
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"24px 28px"}}>
+        {activeRoom===null?<DashboardTab data={data} />:<>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}><div style={{width:40,height:40,background:"linear-gradient(135deg,#6366F1,#8B5CF6)",borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:16}}>{activeRoom}</div><div><div style={{fontWeight:800,fontSize:17}}>{activeRoom} 號房</div>{room?.tenant.name&&<div style={{color:C.muted,fontSize:13}}>{room.tenant.name}　{room.tenant.phone}</div>}</div></div>
+          <div style={{display:"flex",gap:8,marginBottom:22,background:C.surface,padding:6,borderRadius:14,boxShadow:shadow,width:"fit-content"}}>
+            {tabs.map(t=><button key={t.key} onClick={()=>setActiveTab(t.key)} style={{padding:"8px 18px",border:"none",borderRadius:10,cursor:"pointer",background:activeTab===t.key?"linear-gradient(135deg,#6366F1,#8B5CF6)":"transparent",color:activeTab===t.key?"#fff":C.muted,fontSize:13,fontWeight:700}}>{t.icon} {t.label}</button>)}
+          </div>
+          {activeTab==="tenant"&&<TenantTab room={room} roomKey={activeRoom} updateRoom={updateRoom} showToast={showToast} />}
+          {activeTab==="elec"&&<ElecTab room={room} roomKey={activeRoom} updateRoom={updateRoom} showToast={showToast} />}
+          {activeTab==="rent"&&<RentTab room={room} roomKey={activeRoom} updateRoom={updateRoom} showToast={showToast} />}
+          {activeTab==="repair"&&<RepairTab room={room} roomKey={activeRoom} updateRoom={updateRoom} showToast={showToast} />}
+        </>}
+      </div>
+    </div>
+  </div>;
+}
+ReactDOM.render(<App />, document.getElementById("root"));
+</script>
+</body>
+</html>
